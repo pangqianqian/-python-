@@ -1,0 +1,109 @@
+
+配置ubuntu16.04下Theano使用GPU运行程序的环境
+
+ubuntu16.04默认安装了python2.7和python3.5 。本教程使用python3.5
+
+第一步：将ubuntu16.04默认的python2修改成默认使用python3 。
+	
+sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 100
+ 
+sudo update-alternatives --install /usr/bin/python python /usr/bin/python3 150
+
+运行上述代码之后会将ubuntu16.04默认使用python2修改为默认使用python3 。
+
+输入命令 python 可以进入python的交互界面，会显示python的版本 。
+
+第二步：安装theano和CUDA
+	
+sudo apt-get install python3-numpy python3-scipy python3-dev python3-pip python3-nose g++ libopenblas-dev git
+sudo pip3 install Theano
+ 
+# cuda 7.5 don't support the default g++ version. Install an supported version and make it the default.
+sudo apt-get install g++-4.9
+ 
+sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.9 20
+sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-5 10
+ 
+sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.9 20
+sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-5 10
+ 
+sudo update-alternatives --install /usr/bin/cc cc /usr/bin/gcc 30
+sudo update-alternatives --set cc /usr/bin/gcc
+ 
+sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++ 30
+sudo update-alternatives --set c++ /usr/bin/g++
+ 
+# Work around a glibc bug
+echo -e "\n[nvcc]\nflags=-D_FORCE_INLINES\n" >> ~/.theanorc
+
+逐个运行上述命令即可安装theano和CUDA，以及numpy、scipy等常用的库。
+
+安装完成后，可进入python交互界面，运行
+
+import numpy；numpy.test()         
+
+import scipy；scipy.test()
+
+import theano；theano.test()
+
+检测是否安装成功。
+
+作者安装后测试时numpy和scipy这两个库显示OK，theano显示Fail,但是theano可以正常导入和使用。（这点我也不明白，大神们路过时还望指点一二）
+
+至此，theano安装完毕，可以在cpu上运行theano的程序了。
+
+ 
+
+第三步：配置.theanorc文件
+
+在linux根目录下打开.theanorc(注意前面是带点的)文件，将
+
+[global]
+
+device = gpu
+
+floatX = float32
+
+[nvcc]
+
+fastmath = True
+
+加入到该文件里。
+
+
+
+第四步：安装nvcc
+
+这个就比较简单了
+
+sudo apt-get insatll nvcc
+
+就可以了。
+
+至此，所有安装程序都完成了。
+
+
+可以使用下面这点代码来测试程序是使用cpu还是gpu
+	
+from theano import function, config, shared, sandbox 
+import theano.tensor as T 
+import numpy 
+import time
+ 
+vlen = 10 * 30 * 768  # 10 x #cores x # threads per core 
+iters = 1000
+ 
+rng = numpy.random.RandomState(22) 
+x = shared(numpy.asarray(rng.rand(vlen), config.floatX)) 
+f = function([], T.exp(x)) 
+print （f.maker.fgraph.toposort()） 
+t0 = time.time() 
+for i in range(iters): 
+    r = f()
+t1 = time.time() 
+print （'Looping %d times took' % iters, t1 - t0, 'seconds' ）
+print （'Result is', r） 
+if numpy.any([isinstance(x.op, T.Elemwise) for x in f.maker.fgraph.toposort()]): 
+    print （'Used the cpu'）
+else: 
+    print （'Used the gpu'）
